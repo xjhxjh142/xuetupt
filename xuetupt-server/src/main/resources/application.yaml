@@ -1,0 +1,52 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: xuetupt
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://192.168.98.100:3306/xuetupt?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: 330205
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+  redis:
+    host: 192.168.98.100
+    port: 6379
+    password: 330205
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        time-between-eviction-runs: 10s
+  rabbitmq:
+    host: 192.168.98.100
+    port: 5672
+    username: admin
+    password: 330205
+    virtual-host: /
+    listener:
+      simple:
+        prefetch: 1
+        concurrency: 5
+        max-concurrency: 10
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  type-aliases-package: com.xuetupt.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    com.xuetupt: debug

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 应用名称 -->
+    <property name="APP_NAME" value="xuetupt-server" />
+    <!-- 日志目录 -->
+    <property name="LOG_HOME" value="logs" />
+
+    <!-- 控制台输出：结构化 JSON 格式 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 文件输出：按天滚动，JSON 格式 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${APP_NAME}.%d{yyyyMMdd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>{"t":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS}","l":"%level","m":"%logger{0}","c":"%X{traceId:-}","msg":"%msg"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 秒杀独立日志 -->
+    <appender name="SECKILL_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/seckill.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/seckill.%d{yyyyMMdd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>{"t":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS}","c":"%X{traceId:-}","msg":"%msg"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 缓存操作独立日志 -->
+    <appender name="CACHE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/cache.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/cache.%d{yyyyMMdd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>{"t":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS}","c":"%X{traceId:-}","msg":"%msg"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logger 配置 -->
+    <logger name="com.xuetupt" level="INFO" />
+
+    <!-- 秒杀日志分离 -->
+    <logger name="com.xuetupt.service.impl.CourseServiceImpl" level="INFO" additivity="false">
+        <appender-ref ref="SECKILL_FILE" />
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- 缓存日志分离 -->
+    <logger name="com.xuetupt.utils.CacheClient" level="INFO" additivity="false">
+        <appender-ref ref="CACHE_FILE" />
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </root>
+</configuration>
