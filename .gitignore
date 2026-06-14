@@ -40,3 +40,6 @@ Thumbs.db
 # Temp
 tmp/
 *.tmp
+*.db-shm
+*.db-wal
+*.db
