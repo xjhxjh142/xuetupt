@@ -158,6 +158,7 @@ def create_nodes(client: OpenAI):
             text = output.socratic_question
         if not text:
             text = "请继续你的思考，告诉我你的想法。"
+        logger.info(f"finalize_node: {text}")
         return {
             "final_output": text,
             "history": [{"role": "assistant", "content": text}],

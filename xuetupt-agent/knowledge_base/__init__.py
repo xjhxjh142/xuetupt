@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import math
 import re
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Optional
 import requests
 from config import config
 from models.schemas import KnowledgeChunk
+
+logger = logging.getLogger("xuetupt")
 
 
 class KnowledgeBase:
@@ -20,25 +23,46 @@ class KnowledgeBase:
         self.chunks: list[KnowledgeChunk] = []
         self.embeddings: list[list[float]] = []
         self._loaded = False
-        # BM25 预计算数据
         self._bm25_data = None
+        self.milvus = None
+
+    def _init_milvus(self):
+        if self.milvus is None:
+            from knowledge_base.milvus_store import MilvusStore
+
+            self.milvus = MilvusStore()
+        return self.milvus
 
     def load(self, force_reload: bool = False):
+        """加载知识库：文档 → 知识块 → 向量 + BM25 索引"""
         if self._loaded and not force_reload:
             return
         self.chunks = self._load_documents()
         self.embeddings = self._load_or_compute_embeddings(force_reload)
         self._bm25_data = self._build_bm25_index()
+        # 同步到 Milvus
+        if self.embeddings:
+            try:
+                ms = self._init_milvus()
+                if ms.count() == 0:
+                    ms.insert(self.chunks, self.embeddings)
+                    logger.info(f"Milvus 同步完成: {len(self.chunks)} 条")
+            except Exception as e:
+                logger.warning(f"Milvus 不可用，回退到内存检索: {e}")
+                self.milvus = None
         self._loaded = True
 
     def _load_documents(self) -> list[KnowledgeChunk]:
+        """从 Markdown 文件加载知识块"""
         chunks = []
         if not self.kb_dir.exists():
             return chunks
+        # 按文件名排序，先加载基础知识，再加载专题知识
         for md_file in sorted(self.kb_dir.glob("*.md")):
             text = md_file.read_text(encoding="utf-8")
             sections = re.split(r"\n##\s+", text)
             title_base = md_file.stem
+            # 每个二级标题及其内容作为一个知识块，若无二级标题则整个文档作为一个知识块
             for i, sec in enumerate(sections):
                 if not sec.strip():
                     continue
@@ -61,7 +85,7 @@ class KnowledgeBase:
     def _ollama_embed(self, texts: list[str]) -> list[list[float]]:
         """调用 Ollama API 获取文本向量表示"""
         resp = requests.post(
-            f"{config.llm_base_url}/api/embed",
+            f"{config.embedding_base_url}/api/embed",
             json={"model": config.embedding_model, "input": texts},
             timeout=120,
         )
@@ -69,10 +93,12 @@ class KnowledgeBase:
         return resp.json()["embeddings"]
 
     def _content_hash(self) -> str:
+        """计算知识块内容的哈希值，用于缓存命名"""
         combined = "".join(c.content for c in self.chunks)
         return hashlib.md5(combined.encode()).hexdigest()[:12]
 
     def _load_or_compute_embeddings(self, force: bool = False) -> list[list[float]]:
+        """加载缓存的向量，或计算新的向量并缓存"""
         if not self.chunks:
             return []
         cache_path = self.cache_dir / f"emb_{self._content_hash()}.json"
@@ -86,13 +112,23 @@ class KnowledgeBase:
                 json.dump(emb, f)
             return emb
         except Exception as e:
+            logger.error(f"向量计算失败: {e}")
             return []
 
     def retrieve(self, query: str, top_k: int = 0) -> list[KnowledgeChunk]:
-        """向量语义检索"""
+        """向量语义检索（优先 Milvus，回退内存）"""
         if not self.chunks:
             return []
         top_k = top_k or config.retriever_top_k
+
+        if self.milvus:
+            try:
+                query_vec = self._ollama_embed([query])[0]
+                return self.milvus.search(query_vec, top_k)
+            except Exception as e:
+                logger.warning(f"Milvus 检索失败，回退到内存: {e}")
+
+        # 回退：内存余弦相似度
         if not self.embeddings:
             return self._keyword_retrieve(query, top_k)
         try:
@@ -207,6 +243,7 @@ class KnowledgeBase:
         return results
 
     def _keyword_retrieve(self, query: str, top_k: int) -> list[KnowledgeChunk]:
+        """简单关键词检索，匹配标题和内容中的词"""
         words = set(re.findall(r"[\w一-鿿]+", query.lower()))
         scored = []
         for chunk in self.chunks:

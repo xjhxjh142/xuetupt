@@ -15,10 +15,12 @@ router = APIRouter(prefix="/api/agent", tags=["socratic"])
 
 def _extract_reply(result: dict) -> str:
     """从 LangGraph 结果中提取回复文本"""
+    if result.get("final_output"):
+        return result["final_output"]
     tutor = result.get("tutor_output")
     if tutor and hasattr(tutor, "socratic_question") and tutor.socratic_question:
         return tutor.socratic_question
-    return result.get("final_output", "")
+    return ""
 
 
 def _invoke(app, user_input: str, dialog_id: str) -> dict:
